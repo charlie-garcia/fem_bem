@@ -1,0 +1,10 @@
+# Ignore the build directory
+/dist
+/build
+/mf.egg-info
+mf/__pycache__/
+/meshes
+
+# Ignore logs
+logs
+*.log
