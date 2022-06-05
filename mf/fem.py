@@ -55,6 +55,51 @@ def gmsh2dolfin_subd(path, mesh_name, dim, bord_string_tag, surface_string_tag):
     
     return fmesh, mf_boundary, mf_domains
 
+def gmsh2dolfin(path, mesh_name, dim, bord_string_tag, surface_string_tag):
+    my_mesh = meshio.read(path+mesh_name)
+    if dim=='2D':
+        set_prune_z = True
+    elif dim=='3D':
+        set_prune_z = False
+
+    def create_mesh(mesh, cell_type, my_tag, prune_z=False):
+        cells = np.vstack([cell.data for cell in mesh.cells if cell.type==cell_type])
+        cell_data = np.hstack([mesh.cell_data_dict["gmsh:physical"][key]
+                              for key in mesh.cell_data_dict["gmsh:physical"].keys() if key==cell_type])
+    
+        # Remove z-coordinates from mesh if we have a 2D cell and all points have the same third coordinate
+        points= mesh.points
+        if prune_z:
+            points = points[:,:2]
+        mesh_new = meshio.Mesh(points=points, cells={cell_type: cells}, cell_data={my_tag:[cell_data]})
+        return mesh_new
+    
+    border_mesh_name_xdmf = "border_fmv.xdmf"
+    dom_mesh_name_xdmf = "domains_fmesh.xdmf"
+    
+    line_border_mesh = create_mesh(my_mesh, "line", bord_string_tag, prune_z=set_prune_z)
+    meshio.write(path + border_mesh_name_xdmf, line_border_mesh)
+    
+    triangle_mesh = create_mesh(my_mesh, "triangle", surface_string_tag, prune_z=set_prune_z)  # Change to false if wanna 2D
+    meshio.write(path + dom_mesh_name_xdmf, triangle_mesh)
+    
+    # 
+    fmesh = Mesh()
+    # plot(fmesh)
+    with XDMFFile(path + dom_mesh_name_xdmf) as infile:
+        infile.read(fmesh)
+    
+    mvc = MeshValueCollection("size_t", fmesh, 1)
+    
+    with XDMFFile(path + border_mesh_name_xdmf) as infile:
+        print("Reading 1d line data into dolfin mvc")
+        infile.read(mvc, bord_string_tag)
+    
+    print("Constructing MeshFunction from MeshValueCollection")
+    mf = MeshFunction('size_t',fmesh, mvc)
+    
+    return fmesh, mf
+
 def connect_triangles_fem(V, u, mesh, element, plot_info):
     if element == 'dof':
         n = V.dim()                                                     # n nodes
@@ -106,3 +151,29 @@ def getCentersTriangles(xx, yy, spl):
         se[jj] = np.sqrt( det(uv0)**2 + det(uv1)**2 + det(uv2)**2 ) /2
         
     return cs, se.reshape(len(cs),1)
+
+def write_gmsh(path, mesh_name):
+    import os.path, gmsh
+    
+    if os.path.exists(path+mesh_name):
+        while True:
+            try:
+                overwrite = str(input("Existing file, wanna replace-it? [y/n/c]: "))
+            except ValueError:
+                print("Sorry, I didn't understand that.")                       # Return to the start of the loop
+                continue
+            else:
+                break                                                           #we're ready to exit the loop.
+
+        if 'y' in overwrite: 
+            gmsh.write(path+mesh_name)
+            print('Overwriting existing file')
+        elif 'c' in overwrite:
+            print('Skipping mesh creation, using old mesh: '+mesh_name)
+
+        else:
+            raise ValueError("Please change the name of the file")
+    
+    else:
+        print ("Creating new file")
+        gmsh.write(path+mesh_name)
