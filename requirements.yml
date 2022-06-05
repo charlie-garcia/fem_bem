@@ -16,7 +16,5 @@ dependencies:
   - jupyter
   - pip:
     - gmsh==4.7.1
-    - numba==0.49.1
-    - pip-autoremove==0.9.1
     - tikzplotlib==0.9.12
     - mpld3
